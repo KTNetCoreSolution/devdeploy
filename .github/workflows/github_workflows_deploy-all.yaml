@@ -71,29 +71,42 @@ jobs:
               }
               $currentTime = "$(Get-Date -Format 'yyyyMMdd-HHmmss').zip"
               $backupFilePath = Join-Path -Path $currentMonthDir -ChildPath $currentTime
-              if ($HandleLockedFiles) {
-                  $tempDir = Join-Path -Path $env:TEMP -ChildPath "BackupTemp"
-                  if (Test-Path $tempDir) {
-                      Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-                  }
-                  New-Item -ItemType Directory -Path $tempDir -Force
-                  Get-ChildItem -Path $SourcePath -Recurse -Force | ForEach-Object {
-                      $destinationPath = Join-Path -Path $tempDir -ChildPath ($_.FullName.Substring($SourcePath.Length).TrimStart('\'))
-                      $destinationDir = Split-Path -Path $destinationPath -Parent
-                      if (-not (Test-Path -Path $destinationDir)) {
-                          New-Item -ItemType Directory -Path $destinationDir -Force
-                      }
-                      try {
-                          Copy-Item -Path $_.FullName -Destination $destinationPath -Recurse -Force -ErrorAction Stop
-                      } catch {
-                          Write-Output "⚠️ Locked file skipped: $($_.FullName)"
-                      }
-                  }
-                  Compress-Archive -Path "$tempDir\*" -DestinationPath $backupFilePath -Force
+              $tempDir = Join-Path -Path $env:TEMP -ChildPath "BackupTemp"
+              if (Test-Path $tempDir) {
                   Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-              } else {
-                  Compress-Archive -Path "$SourcePath\*" -DestinationPath $backupFilePath -Force
               }
+              New-Item -ItemType Directory -Path $tempDir -Force
+              if ($HandleLockedFiles) {
+                  # 백엔드 및 배포 디렉터리: 잠긴 파일 처리, build와 .gradle 제외
+                  Get-ChildItem -Path $SourcePath -Recurse -Force |
+                      Where-Object { -not ($_.FullName -like '*\build\*') -and -not ($_.FullName -like '*\.gradle\*') -and -not ($_.PSIsContainer -and ($_.Name -eq 'build' -or $_.Name -eq '.gradle')) } |
+                      ForEach-Object {
+                          $destinationPath = Join-Path -Path $tempDir -ChildPath ($_.FullName.Substring($SourcePath.Length).TrimStart('\'))
+                          $destinationDir = Split-Path -Path $destinationPath -Parent
+                          if (-not (Test-Path -Path $destinationDir)) {
+                              New-Item -ItemType Directory -Path $destinationDir -Force
+                          }
+                          try {
+                              Copy-Item -Path $_.FullName -Destination $destinationPath -Recurse -Force -ErrorAction Stop
+                          } catch {
+                              Write-Output "⚠️ Locked file skipped: $($_.FullName)"
+                          }
+                      }
+              } else {
+                  # 프론트엔드: node_modules 제외
+                  Get-ChildItem -Path $SourcePath -Recurse -Force |
+                      Where-Object { -not ($_.FullName -like '*\node_modules\*') -and -not ($_.PSIsContainer -and $_.Name -eq 'node_modules') } |
+                      ForEach-Object {
+                          $destinationPath = Join-Path -Path $tempDir -ChildPath ($_.FullName.Substring($SourcePath.Length).TrimStart('\'))
+                          $destinationDir = Split-Path -Path $destinationPath -Parent
+                          if (-not (Test-Path -Path $destinationDir)) {
+                              New-Item -ItemType Directory -Path $destinationDir -Force
+                          }
+                          Copy-Item -Path $_.FullName -Destination $destinationPath -Recurse -Force
+                      }
+              }
+              Compress-Archive -Path "$tempDir\*" -DestinationPath $backupFilePath -Force
+              Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
               Write-Output "✅ Backup completed at $backupFilePath"
           }
           Backup-Files -SourcePath "${{ env.FRONTEND_SOURCE_DIR }}" -BackupPath "${{ env.BACKUP_DIR }}\source\frontend" -HandleLockedFiles $false
@@ -171,6 +184,16 @@ jobs:
               }
               New-Item -ItemType Directory -Path $staticDir -Force
               Copy-Item -Path "$buildOutput\*" -Destination $staticDir -Recurse -Force
+              # index.html을 404.html로 복사
+              $indexHtml = Join-Path -Path $buildOutput -ChildPath "index.html"
+              $404Html = Join-Path -Path $staticDir -ChildPath "404.html"
+              if (Test-Path -Path $indexHtml) {
+                  Copy-Item -Path $indexHtml -Destination $404Html -Force
+                  Write-Output "✅ Copied index.html to 404.html in $staticDir"
+              } else {
+                  Write-Error "❌ index.html not found in $buildOutput"
+                  exit 1
+              }
               Write-Output "✅ Frontend build files copied to: $staticDir"
           } else {
               Write-Error "❌ Frontend build output not found: $buildOutput"
