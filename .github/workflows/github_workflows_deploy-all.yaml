@@ -176,7 +176,7 @@ jobs:
       - name: Copy Frontend Build to Backend
         shell: powershell
         run: |
-          $buildOutput = "${{ env.FRONTEND_SOURCE_DIR }}\dist"
+          $buildOutput = "${{ env.FRONTEND_SOURCE_DIR }}/dist"
           $staticDir = "${{ env.BACKEND_SOURCE_DIR }}\src\main\resources\static"
           if (Test-Path -Path $buildOutput) {
               if (Test-Path -Path $staticDir) {
