@@ -155,7 +155,20 @@ jobs:
               Write-Output "❌ Backend .env source file not found: $backendEnvSource"
               exit 1
           }
-
+      ### 6-1. public/index.html -> 루트 index.html 복사
+      - name: Copy public index.html to root
+        shell: powershell
+        run: |
+          $sourceIndex = 'D:\workspace\netcore\source\frontend\public\index.html'
+          $destIndex = 'D:\workspace\netcore\source\frontend\index.html'
+          if (Test-Path -Path $sourceIndex) {
+              Copy-Item -Path $sourceIndex -Destination $destIndex -Force
+              Write-Output "✅ index.html copied from public to root directory."
+          } else {
+              Write-Output "❌ source index.html not found at $sourceIndex"
+              exit 1
+          }
+    
       ### 7. 프론트엔드 빌드
       - name: Build Frontend
         shell: powershell
