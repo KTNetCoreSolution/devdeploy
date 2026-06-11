@@ -119,40 +119,34 @@ jobs:
         run: |
           $branch = 'main'
 
-          function Remove-Directory {
-            param([string]$Path)
-            
-              if (Test-Path $Path) {
-                  Write-Output "🗑 Removing directory: $Path"
-                
-                  # 1차 삭제
-                  Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
-                
-                  # 2차 강제 삭제 (잠긴 파일/읽기전용 처리)
-                  if (Test-Path $Path) {
-                      Write-Output "⚠️ Directory still exists. Forcing removal..."
-                      Get-ChildItem -Path $Path -Recurse -Force | ForEach-Object {
-                          if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
-                              $_.Attributes = $_.Attributes -bxor [System.IO.FileAttributes]::ReadOnly
-                          }
-                      }
-                      Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
-                  }
-                  Write-Output "✅ Successfully removed: $Path"
-              }
-          }
-
-          # Frontend
-          Remove-Directory "${{ env.FRONTEND_SOURCE_DIR }}"
-          Write-Output "🔄 Cloning frontend repository (branch: $branch)"
-          git clone --branch $branch --depth 1 "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
-          Write-Output "✅ Frontend source code cloned successfully"
+          function Force-Remove-Directory {
+              param([string]$Path)
           
-          # Backend
-          Remove-Directory "${{ env.BACKEND_SOURCE_DIR }}"
-          Write-Output "🔄 Cloning backend repository (branch: $branch)"
+              if (-not (Test-Path $Path)) { return }
+          
+              Write-Output "🗑 Force removing: $Path"
+          
+              # 1. 소유권 가져오기 + 권한 부여
+              takeown /F $Path /R /D Y | Out-Null
+              icacls $Path /grant Administrators:F /T | Out-Null
+          
+              # 2. 읽기전용 제거
+              Get-ChildItem -Path $Path -Recurse -Force | ForEach-Object {
+                  if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+                      $_.Attributes = $_.Attributes -bxor [System.IO.FileAttributes]::ReadOnly
+                  }
+              }
+          
+              # 3. 삭제
+              Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
+              Write-Output "✅ Successfully removed: $Path"
+          }
+          
+          Force-Remove-Directory "${{ env.FRONTEND_SOURCE_DIR }}"
+          git clone --branch $branch --depth 1 "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
+          
+          Force-Remove-Directory "${{ env.BACKEND_SOURCE_DIR }}"
           git clone --branch $branch --depth 1 "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}"
-          Write-Output "✅ Backend source code cloned successfully"
           
       ### 6. .env 파일 복사
       - name: Copy .env Files
