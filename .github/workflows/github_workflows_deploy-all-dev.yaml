@@ -118,21 +118,42 @@ jobs:
         shell: powershell
         run: |
           $branch = 'main'
-          if (Test-Path -Path "${{ env.FRONTEND_SOURCE_DIR }}") {
-              Remove-Item -Path "${{ env.FRONTEND_SOURCE_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
-              Write-Output "✅ Removed existing frontend source directory: ${{ env.FRONTEND_SOURCE_DIR }}"
-          }
-          Write-Output "🔄 Cloning frontend repository from: ${{ env.FRONTEND_REPO_URL }} (branch: $branch)"
-          git clone --branch $branch "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
-          Write-Output "✅ Frontend source code cloned to: ${{ env.FRONTEND_SOURCE_DIR }}"
-          if (Test-Path -Path "${{ env.BACKEND_SOURCE_DIR }}") {
-              Remove-Item -Path "${{ env.BACKEND_SOURCE_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
-              Write-Output "✅ Removed existing backend source directory: ${{ env.BACKEND_SOURCE_DIR }}"
-          }
-          Write-Output "🔄 Cloning backend repository from: ${{ env.BACKEND_REPO_URL }} (branch: $branch)"
-          git clone --branch $branch "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}"
-          Write-Output "✅ Backend source code cloned to: ${{ env.BACKEND_SOURCE_DIR }}"
 
+          function Remove-Directory {
+            param([string]$Path)
+            
+              if (Test-Path $Path) {
+                  Write-Output "🗑 Removing directory: $Path"
+                
+                  # 1차 삭제
+                  Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
+                
+                  # 2차 강제 삭제 (잠긴 파일/읽기전용 처리)
+                  if (Test-Path $Path) {
+                      Write-Output "⚠️ Directory still exists. Forcing removal..."
+                      Get-ChildItem -Path $Path -Recurse -Force | ForEach-Object {
+                          if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+                              $_.Attributes = $_.Attributes -bxor [System.IO.FileAttributes]::ReadOnly
+                          }
+                      }
+                      Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
+                  }
+                  Write-Output "✅ Successfully removed: $Path"
+              }
+          }
+
+          # Frontend
+          Remove-Directory "${{ env.FRONTEND_SOURCE_DIR }}"
+          Write-Output "🔄 Cloning frontend repository (branch: $branch)"
+          git clone --branch $branch --depth 1 "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
+          Write-Output "✅ Frontend source code cloned successfully"
+          
+          # Backend
+          Remove-Directory "${{ env.BACKEND_SOURCE_DIR }}"
+          Write-Output "🔄 Cloning backend repository (branch: $branch)"
+          git clone --branch $branch --depth 1 "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}"
+          Write-Output "✅ Backend source code cloned successfully"
+          
       ### 6. .env 파일 복사
       - name: Copy .env Files
         shell: powershell
