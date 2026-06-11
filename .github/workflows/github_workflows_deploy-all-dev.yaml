@@ -134,7 +134,6 @@ jobs:
                   Push-Location $TargetDir
                   
                   try {
-                      # Self-hosted 환경에서 안정적으로 동작하도록 명령어 강화
                       git fetch --all --prune --force
                       git checkout $Branch --force
                       git reset --hard origin/$Branch
@@ -157,12 +156,12 @@ jobs:
                   Write-Output "✅ Fresh clone completed"
               }
           }
-
-    # Frontend 업데이트
-    Update-Repository "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}" $branch
-
-    # Backend 업데이트
-    Update-Repository "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}" $branch
+          
+          # Frontend
+          Update-Repository "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}" $branch
+          
+          # Backend
+          Update-Repository "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}" $branch
           
       ### 6. .env 파일 복사
       - name: Copy .env Files
