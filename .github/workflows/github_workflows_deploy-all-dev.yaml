@@ -118,35 +118,51 @@ jobs:
         shell: powershell
         run: |
           $branch = 'main'
-
-          function Force-Remove-Directory {
-              param([string]$Path)
+          $ErrorActionPreference = 'Stop'
           
-              if (-not (Test-Path $Path)) { return }
+          function Update-Repository {
+              param(
+                  [string]$RepoUrl,
+                  [string]$TargetDir,
+                  [string]$Branch
+              )
           
-              Write-Output "🗑 Force removing: $Path"
+              Write-Output "🔄 Processing: $TargetDir"
           
-              # 1. 소유권 가져오기 + 권한 부여
-              takeown /F $Path /R /D Y | Out-Null
-              icacls $Path /grant Administrators:F /T | Out-Null
-          
-              # 2. 읽기전용 제거
-              Get-ChildItem -Path $Path -Recurse -Force | ForEach-Object {
-                  if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
-                      $_.Attributes = $_.Attributes -bxor [System.IO.FileAttributes]::ReadOnly
+              if (Test-Path $TargetDir) {
+                  Write-Output "📂 Repository exists → Pulling updates..."
+                  Push-Location $TargetDir
+                  
+                  try {
+                      # Self-hosted 환경에서 안정적으로 동작하도록 명령어 강화
+                      git fetch --all --prune --force
+                      git checkout $Branch --force
+                      git reset --hard origin/$Branch
+                      git clean -fdx --quiet
+                      
+                      Write-Output "✅ Successfully updated from remote"
                   }
+                  catch {
+                      Write-Output "⚠️ Update failed. Trying to recover..."
+                      git reset --hard origin/$Branch
+                      git clean -fdx --quiet
+                  }
+                  finally {
+                      Pop-Location
+                  }
+              } 
+              else {
+                  Write-Output "📥 Fresh cloning repository..."
+                  git clone --branch $Branch --depth 1 $RepoUrl $TargetDir
+                  Write-Output "✅ Fresh clone completed"
               }
-          
-              # 3. 삭제
-              Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
-              Write-Output "✅ Successfully removed: $Path"
           }
-          
-          Force-Remove-Directory "${{ env.FRONTEND_SOURCE_DIR }}"
-          git clone --branch $branch --depth 1 "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
-          
-          Force-Remove-Directory "${{ env.BACKEND_SOURCE_DIR }}"
-          git clone --branch $branch --depth 1 "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}"
+
+    # Frontend 업데이트
+    Update-Repository "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}" $branch
+
+    # Backend 업데이트
+    Update-Repository "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}" $branch
           
       ### 6. .env 파일 복사
       - name: Copy .env Files
