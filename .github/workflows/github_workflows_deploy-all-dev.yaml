@@ -118,50 +118,20 @@ jobs:
         shell: powershell
         run: |
           $branch = 'main'
-          $ErrorActionPreference = 'Stop'
-          
-          function Update-Repository {
-              param(
-                  [string]$RepoUrl,
-                  [string]$TargetDir,
-                  [string]$Branch
-              )
-          
-              Write-Output "🔄 Processing: $TargetDir"
-          
-              if (Test-Path $TargetDir) {
-                  Write-Output "📂 Repository exists → Pulling updates..."
-                  Push-Location $TargetDir
-                  
-                  try {
-                      git fetch --all --prune --force
-                      git checkout $Branch --force
-                      git reset --hard origin/$Branch
-                      git clean -fdx --quiet
-                      
-                      Write-Output "✅ Successfully updated from remote"
-                  }
-                  catch {
-                      Write-Output "⚠️ Update failed. Trying to recover..."
-                      git reset --hard origin/$Branch
-                      git clean -fdx --quiet
-                  }
-                  finally {
-                      Pop-Location
-                  }
-              } 
-              else {
-                  Write-Output "📥 Fresh cloning repository..."
-                  git clone --branch $Branch --depth 1 $RepoUrl $TargetDir
-                  Write-Output "✅ Fresh clone completed"
-              }
+          if (Test-Path -Path "${{ env.FRONTEND_SOURCE_DIR }}") {
+              Remove-Item -Path "${{ env.FRONTEND_SOURCE_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
+              Write-Output "✅ Removed existing frontend source directory: ${{ env.FRONTEND_SOURCE_DIR }}"
           }
-          
-          # Frontend
-          Update-Repository "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}" $branch
-          
-          # Backend
-          Update-Repository "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}" $branch
+          Write-Output "🔄 Cloning frontend repository from: ${{ env.FRONTEND_REPO_URL }} (branch: $branch)"
+          git clone --branch $branch "${{ env.FRONTEND_REPO_URL }}" "${{ env.FRONTEND_SOURCE_DIR }}"
+          Write-Output "✅ Frontend source code cloned to: ${{ env.FRONTEND_SOURCE_DIR }}"
+          if (Test-Path -Path "${{ env.BACKEND_SOURCE_DIR }}") {
+              Remove-Item -Path "${{ env.BACKEND_SOURCE_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
+              Write-Output "✅ Removed existing backend source directory: ${{ env.BACKEND_SOURCE_DIR }}"
+          }
+          Write-Output "🔄 Cloning backend repository from: ${{ env.BACKEND_REPO_URL }} (branch: $branch)"
+          git clone --branch $branch "${{ env.BACKEND_REPO_URL }}" "${{ env.BACKEND_SOURCE_DIR }}"
+          Write-Output "✅ Backend source code cloned to: ${{ env.BACKEND_SOURCE_DIR }}"
           
       ### 6. .env 파일 복사
       - name: Copy .env Files
